@@ -53,9 +53,9 @@ local function GetStockCount(stockText)
 end
     local Dropdown = Tabs.Main:AddDropdown("seed",{
         Title = "Select seed to buy",
-        Values = {"Cactus Seed", "Carnivorous Seed", "Shroombino Seed", "Sunflower Seed", "Tomatrio Seed", "Dragon fruit Seed", "Strawberry Seed", "Eggplant Seed", "Watermelon Seed", "Grape Seed", "Cocotank Seed", "Mr Carrot Seed", "Mango Seed", "Pumpkin Seed"},
+        Values = {"King Limone Seed", "Mr Carrot Seed", "Carnivorous Seed", "Shroombino Seed", "Tomatrio Seed", "Mango Seed","Cactus Seed", "Sunflower Seed", "Dragon fruit Seed", "Strawberry Seed", "Eggplant Seed", "Watermelon Seed", "Grape Seed", "Cocotank Seed", "Pumpkin Seed"},
         Multi = true,
-        Default = {"Cactus Seed"},
+        Default = {"King Limone Seed", "Mr Carrot Seed", "Carnivorous Seed", "Shroombino Seed", "Tomatrio Seed", "Mango Seed"},
     })
 
     Dropdown:OnChanged(function(Value)
@@ -70,7 +70,7 @@ end
         Title = "Gear to buy",
         Values = {"Water Bucket", "Frost Grenade", "Carrot Launcher", "Banana Gun", "Frost Blower"},
         Multi = true,
-        Default = {"Water Bucket"},
+        Default = {"Water Bucket", "Frost Grenade"},
     })
 
     MultiDropdown:OnChanged(function(Value)
@@ -83,7 +83,7 @@ end
 
 Tabs.Main:AddToggle("autobuyseed"	, {
 		Title = "Auto buy seed selected",
-		Default = false ,
+		Default = true ,
 		Callback = function(Value)
 			GlobalEnv.Seeds = Value
 		end
@@ -121,7 +121,7 @@ coroutine.wrap(function()
 end)()
 Tabs.Main:AddToggle("autobuygear"	, {
 		Title = "Auto buy gear selected",
-		Default = false ,
+		Default = true ,
 		Callback = function(Value)
 			GlobalEnv.Gears = Value
 		end
