@@ -70,7 +70,7 @@ end
         Title = "Gear to buy",
         Values = {"Water Bucket", "Frost Grenade", "Carrot Launcher", "Banana Gun", "Frost Blower"},
         Multi = true,
-        Default = {"Water Bucket", "Frost Grenade"},
+        Default = {"Water Bucket", "Frost Grenade", "Frost Blower"},
     })
 
     MultiDropdown:OnChanged(function(Value)
