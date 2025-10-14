@@ -2,9 +2,9 @@ local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
 local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local BuyItem = ReplicatedStorage.Remotes.BuyItem 
-local BuyGear = ReplicatedStorage.Remotes.BuyGear 
-local EquipBest = ReplicatedStorage.Remotes.EquipBest 
+local BuyItem = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("BuyItem")
+local BuyGear = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("BuyGear")
+local EquipBest = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("EquipBest")
 local Players = game:GetService("Players")
 local isVisible = true
 local TweenService = game:GetService("TweenService")
@@ -15,7 +15,7 @@ local Plots = Workspace.Plots
 local BuyRow = ReplicatedStorage.Remotes.BuyRow
 local BuyPlatform = ReplicatedStorage.Remotes.BuyPlatform 
 local PROMPT_PATH = Workspace.ScriptedMap.Event.EventRewards.TalkPart.ProximityPrompt
-
+local Event = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CardUpdateEvent")
 local INTERACT_KEY_STRING = "E" 
 local TWEEN_TIME = 1
 local TWEEN_INFO = TweenInfo.new(TWEEN_TIME, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
@@ -342,8 +342,47 @@ coroutine.wrap(function()
         end
     end
 end)()
- local function EquipTool(toolNameFragment)
+local function SafeFindChild(parent, ...)
+    local current = parent
+    for _, childName in ipairs({...}) do
+        if not current then return nil end
+        current = current:FindFirstChild(childName)
+    end
+    return current
+end
 
+local CheckForRestart = SafeFindChild(
+    Workspace.ScriptedMap.Event,
+    "HitListVisualizer",
+    "Hitbox",
+    "GuiAttachment",
+    "Billboard",
+    "TextLabel"
+)
+
+Tabs.Event:AddToggle("autorestart", {
+    Title = "Auto restart tomade torelli",
+    Default = false,
+    Callback = function(Value)
+        GlobalEnv.autodrestart = Value
+    end
+})
+
+coroutine.wrap(function()
+while true do
+if GlobalEnv.autodrestart == true and CheckForRestart then
+Event:FireServer("purchaseReplay")
+end
+end
+end)()
+
+
+
+
+
+
+-- need to fix from here
+local function EquipTool(toolNameFragment)
     if not LocalPlayer.Backpack then
         print("error: Backpack is not ready.")
         return
@@ -353,7 +392,6 @@ end)()
     local lowerFragment = string.lower(toolNameFragment)
 
     for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
-
         if tool:IsA("Tool") and string.find(string.lower(tool.Name), lowerFragment) then
             table.insert(matchingTools, tool)
         end
@@ -361,9 +399,7 @@ end)()
 
     if LocalPlayer.Character then
         for _, tool in ipairs(LocalPlayer.Character:GetChildren()) do
-
             if tool:IsA("Tool") and string.find(string.lower(tool.Name), lowerFragment) then
-
                 local alreadyFound = false
                 for _, existingTool in ipairs(matchingTools) do
                     if existingTool == tool then
@@ -377,34 +413,38 @@ end)()
             end
         end
     end
+    
     local vInputManager = game:GetService("VirtualInputManager")
-        local holdDuration = 0.25
+    local holdDuration = 0.25
+    
     if #matchingTools > 0 then
-
         local randomIndex = math.random(1, #matchingTools)
         local toolToEquip = matchingTools[randomIndex]
         toolToEquip.Parent = LocalPlayer.Character
+        task.wait(0.1)
         toolToEquip:Activate() 
         task.wait(0.1)
-    vInputManager:SendKeyEvent(true, INTERACT_KEY_STRING, false, game)
-    task.wait(holdDuration + 0.1)
-    vInputManager:SendKeyEvent(false, INTERACT_KEY_STRING, false, game)
+        vInputManager:SendKeyEvent(true, INTERACT_KEY_STRING, false, game)
+        task.wait(holdDuration + 0.1)
+        vInputManager:SendKeyEvent(false, INTERACT_KEY_STRING, false, game)
     end
 end
+
 local function CheckForToolAndSetFlag(toolNameFragment)
-    
     if not LocalPlayer.Backpack then
-        return
+        return false
     end
 
     local lowerFragment = string.lower(toolNameFragment)
     local toolFound = false
+    
     for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
         if tool:IsA("Tool") and string.find(string.lower(tool.Name), lowerFragment) then
             toolFound = true
             break
         end
     end
+    
     if not toolFound and LocalPlayer.Character then
         for _, tool in ipairs(LocalPlayer.Character:GetChildren()) do
             if tool:IsA("Tool") and string.find(string.lower(tool.Name), lowerFragment) then
@@ -414,43 +454,62 @@ local function CheckForToolAndSetFlag(toolNameFragment)
         end
     end
 
-    if toolFound then
-        return true
-    end
+    return toolFound
 end
 
-Tabs.Event:AddToggle(	"autodailyquest"	, {
-		Title = "Auto daily quest",
-		Default = false ,
-		Callback = function(Value)
-			GlobalEnv.autodailyquest = Value
-		end
+Tabs.Event:AddToggle("autodailyquest", {
+    Title = "Auto daily quest",
+    Default = false,
+    Callback = function(Value)
+        GlobalEnv.autodailyquest = Value
+    end
 })
 
 coroutine.wrap(function()
     while true do
+        task.wait(0.5)
         if GlobalEnv.autodailyquest == true then
-if CheckForToolAndSetFlag(Workspace.Plots.FindPlayerPlot().EventPlatforms["-1"].PlatformEventUI.Title.Text) then
-game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-221.470734, 14.4373589, 963.78894, 0.0145302061, -3.20977449e-08, 0.99989444, 1.6955525e-08, 1, 3.18547393e-08, -0.99989444, 1.64908798e-08, 0.0145302061) 
-    EquipTool(Workspace.Plots.FindPlayerPlot().EventPlatforms["-1"].PlatformEventUI.Title.Text)
-end
-if CheckForToolAndSetFlag(Workspace.Plots.FindPlayerPlot().EventPlatforms["-2"].PlatformEventUI.Title.Text) then
-game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-222.26709, 14.437356, 973.853394, -0.0029228921, -4.35246292e-08, 0.999995708, 2.78393379e-08, 1, 4.36061853e-08, -0.999995708, 2.79666743e-08, -0.0029228921)
-    EquipTool(Workspace.Plots.FindPlayerPlot().EventPlatforms["-2"].PlatformEventUI.Title.Text)
-end
-if CheckForToolAndSetFlag(Workspace.Plots.FindPlayerPlot().EventPlatforms["-3"].PlatformEventUI.Title.Text) then
-game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-221.931732, 14.437356, 983.577087, 0.0145260086, 9.83009851e-09, 0.9998945, -3.94364275e-09, 1, -9.77384396e-09, -0.9998945, -3.80125176e-09, 0.0145260086) 
-    EquipTool(Workspace.Plots.FindPlayerPlot().EventPlatforms["-3"].PlatformEventUI.Title.Text)
-end
-if CheckForToolAndSetFlag(Workspace.Plots.FindPlayerPlot().EventPlatforms["-4"].PlatformEventUI.Title.Text) then
-            game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-221.90036, 14.437356, 993.992615, -0.36594069, 3.05171817e-08, 0.930638194, 3.58376937e-08, 1, -1.86997635e-08, -0.930638194, 2.65089213e-08, -0.36594069)  
-    EquipTool(Workspace.Plots.FindPlayerPlot().EventPlatforms["-4"].PlatformEventUI.Title.Text)
-end
+            local playerPlot = FindPlayerPlot()
+            if playerPlot then
+                local plotData = Workspace.Plots:FindFirstChild(playerPlot)
+                if plotData and plotData:FindFirstChild("EventPlatforms") then
+                    local eventPlatforms = plotData.EventPlatforms
+                    
+                    for i = -1, -4, -1 do
+                        local platformName = tostring(i)
+                        local platform = eventPlatforms:FindFirstChild(platformName)
+                        
+                        if platform then
+                            local platformUI = platform:FindFirstChild("PlatformEventUI")
+                            if platformUI then
+                                local titleLabel = platformUI:FindFirstChild("Title")
+                                if titleLabel and titleLabel.Text ~= "" then
+                                    if CheckForToolAndSetFlag(titleLabel.Text) then
+                                        -- Teleport to specific platform position
+                                        if i == -1 then
+                                            game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-221.470734, 14.4373589, 963.78894, 0.0145302061, -3.20977449e-08, 0.99989444, 1.6955525e-08, 1, 3.18547393e-08, -0.99989444, 1.64908798e-08, 0.0145302061)
+                                        elseif i == -2 then
+                                            game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-222.26709, 14.437356, 973.853394, -0.0029228921, -4.35246292e-08, 0.999995708, 2.78393379e-08, 1, 4.36061853e-08, -0.999995708, 2.79666743e-08, -0.0029228921)
+                                        elseif i == -3 then
+                                            game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-221.931732, 14.437356, 983.577087, 0.0145260086, 9.83009851e-09, 0.9998945, -3.94364275e-09, 1, -9.77384396e-09, -0.9998945, -3.80125176e-09, 0.0145260086)
+                                        elseif i == -4 then
+                                            game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-221.90036, 14.437356, 993.992615, -0.36594069, 3.05171817e-08, 0.930638194, 3.58376937e-08, 1, -1.86997635e-08, -0.930638194, 2.65089213e-08, -0.36594069)
+                                        end
+                                        task.wait(0.2)
+                                        EquipTool(titleLabel.Text)
+                                        task.wait(0.5)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
     end
-end
 end)()
 
-
+-- stop here
 
 
 
@@ -623,8 +682,8 @@ SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
 SaveManager:IgnoreThemeSettings()
 SaveManager:SetIgnoreIndexes({})
-InterfaceManager:SetFolder("github.com")
-SaveManager:SetFolder("github.com/Diffone7")
+InterfaceManager:SetFolder("Fluent")
+SaveManager:SetFolder("Fluent/Fluent")
 InterfaceManager:BuildInterfaceSection(Tabs.Settings)
 SaveManager:BuildConfigSection(Tabs.Settings)
 
