@@ -373,7 +373,7 @@ coroutine.wrap(function()
                 "TextLabel"
             )
             
-            if CheckForRestart then
+            if not CheckForRestart then
                 Event:FireServer("purchaseReplay")
             end
         end
