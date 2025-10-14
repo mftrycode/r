@@ -80,9 +80,9 @@ local function GetStockCount(stockText)
 end
     local Dropdown = Tabs.Main:AddDropdown("seed",{
         Title = "Select seed to buy",
-        Values = {"King Limone Seed", "Mr Carrot Seed", "Carnivorous Seed", "Shroombino Seed", "Tomatrio Seed", "Mango Seed","Cactus Seed", "Sunflower Seed", "Dragon fruit Seed", "Strawberry Seed", "Eggplant Seed", "Watermelon Seed", "Grape Seed", "Cocotank Seed", "Pumpkin Seed"},
+        Values = {"King Limone Seed", "Mr Carrot Seed", "Carnivorous Plant Seed", "Shroombino Seed", "Tomatrio Seed", "Mango Seed","Cactus Seed", "Sunflower Seed", "Dragon fruit Seed", "Strawberry Seed", "Eggplant Seed", "Watermelon Seed", "Grape Seed", "Cocotank Seed", "Pumpkin Seed"},
         Multi = true,
-        Default = {"King Limone Seed", "Mr Carrot Seed", "Carnivorous Seed", "Shroombino Seed", "Tomatrio Seed", "Mango Seed"},
+        Default = {"King Limone Seed", "Mr Carrot Seed", "Carnivorous Plant Seed", "Shroombino Seed", "Tomatrio Seed", "Mango Seed"},
     })
 
     Dropdown:OnChanged(function(Value)
