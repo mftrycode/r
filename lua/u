@@ -351,15 +351,6 @@ local function SafeFindChild(parent, ...)
     return current
 end
 
-local CheckForRestart = SafeFindChild(
-    Workspace.ScriptedMap.Event,
-    "HitListVisualizer",
-    "Hitbox",
-    "GuiAttachment",
-    "Billboard",
-    "TextLabel"
-)
-
 Tabs.Event:AddToggle("autorestart", {
     Title = "Auto restart tomade torelli",
     Default = false,
@@ -369,11 +360,24 @@ Tabs.Event:AddToggle("autorestart", {
 })
 
 coroutine.wrap(function()
-while true do
-if GlobalEnv.autodrestart == true and CheckForRestart then
-Event:FireServer("purchaseReplay")
-end
-end
+    while true do
+        task.wait(1) 
+        
+        if GlobalEnv.autodrestart == true then
+            local CheckForRestart = SafeFindChild(
+                Workspace.ScriptedMap.Event,
+                "HitListVisualizer",
+                "Hitbox",
+                "GuiAttachment",
+                "Billboard",
+                "TextLabel"
+            )
+            
+            if CheckForRestart then
+                Event:FireServer("purchaseReplay")
+            end
+        end
+    end
 end)()
 
 
