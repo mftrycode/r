@@ -554,11 +554,11 @@ local function FirstInteract()
     vInputManager:SendKeyEvent(true, INTERACT_KEY_STRING, false, game)
     task.wait(holdDuration + 0.1)
     vInputManager:SendKeyEvent(false, INTERACT_KEY_STRING, false, game)
-    task.wait(6.1)
+    task.wait(0.1)
     vInputManager:SendKeyEvent(true, INTERACT_KEY_STRING, false, game)
     task.wait(holdDuration + 0.1)
     vInputManager:SendKeyEvent(false, INTERACT_KEY_STRING, false, game)
-    task.wait(0.5)
+    task.wait(0.1)
     root.CFrame = originalCFrame
 end
 
