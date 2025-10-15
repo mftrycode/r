@@ -84,7 +84,7 @@ end
         end
 		GlobalEnv.Gear = Value
     end)
-
+--[[ ----------------------------BUG
 local FavoriteItemRemote = ReplicatedStorage.Remotes.FavoriteItem
 
 local favouriteDropdown = Tabs.Main:AddDropdown("favoriteDropdown", {
@@ -194,7 +194,7 @@ coroutine.wrap(function()
             checkBackpack()
         end
     end
-end)()
+end)()--]]
 Tabs.Main:AddToggle("autobuyseed"	, {
 		Title = "Auto buy seed selected",
 		Default = true ,
