@@ -84,6 +84,7 @@ end
         end
 		GlobalEnv.Gear = Value
     end)
+
 local FavoriteItemRemote = ReplicatedStorage.Remotes.FavoriteItem
 
 local favouriteDropdown = Tabs.Main:AddDropdown("favoriteDropdown", {
@@ -103,11 +104,13 @@ end)
 
 Tabs.Main:AddToggle("autofavoritebrainrot", {
     Title = "Auto favorite brainrot",
-    Default = true,
+    Default = false,
     Callback = function(Value)
         GlobalEnv.Favorite = Value
     end
 })
+
+local processedTools = {} 
 
 local function checkBackpack()
     if not GlobalEnv.Favorite or not GlobalEnv.favors then
@@ -115,43 +118,78 @@ local function checkBackpack()
     end
     
     local backpack = LocalPlayer.Backpack
+    if not backpack then return end
+    
     for _, tool in pairs(backpack:GetChildren()) do
-        if tool:IsA("Tool") and string.find(tool.Name, "kg", 1, true) then
+
+        if tool:IsA("Tool") and string.find(tool.Name, "kg]", 1, true) and not processedTools[tool] then
             
-            local NonHandlePart = nil
-            for _, child in pairs(tool:GetChildren()) do
-                if child.Name ~= "Handle" then
-                    NonHandlePart = child
-                    break
-                end
+            -- Skip if tool contains LocalScript
+            if tool:FindFirstChildOfClass("LocalScript") then
+                processedTools[tool] = true
+                task.wait(0.05) -- Giảm lag
+                continue
             end
             
+            -- Extract clean name
+            local cleanName = string.match(tool.Name, "%[%d+%.?%d*%s*kg%]%s*(.+)") or tool.Name
+            local NonHandlePart = tool:FindFirstChild(cleanName)
+            
             if NonHandlePart then
-                local success, rarityText = pcall(function()
-                    local rarityLabel = NonHandlePart.Hitbox.BrainrotToolUI.Rarity
-                    if rarityLabel and rarityLabel:IsA("TextLabel") then
-                        return rarityLabel.Text
+                local rarityText = nil
+                
+                -- Try Hitbox path first (new version)
+                local success1 = pcall(function()
+                    local hitbox = NonHandlePart:FindFirstChild("Hitbox")
+                    if hitbox then
+                        local ui = hitbox:FindFirstChild("BrainrotToolUI")
+                        if ui then
+                            local rarityLabel = ui:FindFirstChild("Rarity")
+                            if rarityLabel and rarityLabel:IsA("TextLabel") then
+                                rarityText = rarityLabel.Text
+                            end
+                        end
                     end
                 end)
                 
-                if success and rarityText then
-                    -- Check if rarity is in selected favorites
-                    if GlobalEnv.favors[rarityText] then
-                        local itemID = tool:FindFirstChild("ID")
-                        if itemID and itemID.Value and FavoriteItemRemote then
-                            FavoriteItemRemote:FireServer(itemID.Value)
-                            task.wait(0.1)
+                -- Try RootPart path if Hitbox failed (old version)
+                if not rarityText then
+                    pcall(function()
+                        local rootPart = NonHandlePart:FindFirstChild("RootPart")
+                        if rootPart then
+                            local ui = rootPart:FindFirstChild("BrainrotToolUI")
+                            if ui then
+                                local rarityLabel = ui:FindFirstChild("Rarity")
+                                if rarityLabel and rarityLabel:IsA("TextLabel") then
+                                    rarityText = rarityLabel.Text
+                                end
+                            end
                         end
-                    end
+                    end)
                 end
+
+                if rarityText and GlobalEnv.favors[rarityText] then
+                    local itemID = tool:FindFirstChild("ID")
+                    if itemID and itemID.Value and FavoriteItemRemote then
+                        firesignal(FavoriteItemRemote.OnClientEvent, itemID.Value)
+                        processedTools[tool] = true
+                        task.wait(0.15) 
+                    end
+                else
+                    processedTools[tool] = true
+                end
+            else
+                processedTools[tool] = true
             end
+            
+            task.wait(0.05) 
         end
     end
 end
 
 coroutine.wrap(function()
     while true do
-        task.wait(1)
+        task.wait(1) 
         if GlobalEnv.Favorite == true then
             checkBackpack()
         end
