@@ -15,32 +15,9 @@ local Plots = Workspace.Plots
 local BuyRow = ReplicatedStorage.Remotes.BuyRow
 local BuyPlatform = ReplicatedStorage.Remotes.BuyPlatform 
 local PROMPT_PATH = Workspace.ScriptedMap.Event.EventRewards.TalkPart.ProximityPrompt
-local Event = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CardUpdateEvent")
 local INTERACT_KEY_STRING = "E" 
 local TWEEN_TIME = 1
 local TWEEN_INFO = TweenInfo.new(TWEEN_TIME, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
---local PRICE_ORDER = { "$100k", "$2.5m", "$10m" }
 
 
 --create window
@@ -107,7 +84,79 @@ end
         end
 		GlobalEnv.Gear = Value
     end)
+local FavoriteItemRemote = ReplicatedStorage.Remotes.FavoriteItem
 
+local favouriteDropdown = Tabs.Main:AddDropdown("favoriteDropdown", {
+    Title = "Auto Favorite",
+    Values = {"Secret", "Limited", "Godly", "Mythic", "Legendary", "Epic", "Rare"},
+    Multi = true,
+    Default = {"Secret", "Limited"},
+})
+
+favouriteDropdown:OnChanged(function(Value)
+    local Values = {}
+    for Value, State in next, Value do
+        table.insert(Values, Value)
+    end
+    GlobalEnv.favors = Value
+end)
+
+Tabs.Main:AddToggle("autofavoritebrainrot", {
+    Title = "Auto favorite brainrot",
+    Default = true,
+    Callback = function(Value)
+        GlobalEnv.Favorite = Value
+    end
+})
+
+local function checkBackpack()
+    if not GlobalEnv.Favorite or not GlobalEnv.favors then
+        return
+    end
+    
+    local backpack = LocalPlayer.Backpack
+    for _, tool in pairs(backpack:GetChildren()) do
+        if tool:IsA("Tool") and string.find(tool.Name, "kg", 1, true) then
+            
+            local NonHandlePart = nil
+            for _, child in pairs(tool:GetChildren()) do
+                if child.Name ~= "Handle" then
+                    NonHandlePart = child
+                    break
+                end
+            end
+            
+            if NonHandlePart then
+                local success, rarityText = pcall(function()
+                    local rarityLabel = NonHandlePart.Hitbox.BrainrotToolUI.Rarity
+                    if rarityLabel and rarityLabel:IsA("TextLabel") then
+                        return rarityLabel.Text
+                    end
+                end)
+                
+                if success and rarityText then
+                    -- Check if rarity is in selected favorites
+                    if GlobalEnv.favors[rarityText] then
+                        local itemID = tool:FindFirstChild("ID")
+                        if itemID and itemID.Value and FavoriteItemRemote then
+                            FavoriteItemRemote:FireServer(itemID.Value)
+                            task.wait(0.1)
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+coroutine.wrap(function()
+    while true do
+        task.wait(1)
+        if GlobalEnv.Favorite == true then
+            checkBackpack()
+        end
+    end
+end)()
 Tabs.Main:AddToggle("autobuyseed"	, {
 		Title = "Auto buy seed selected",
 		Default = true ,
@@ -350,7 +399,42 @@ local function SafeFindChild(parent, ...)
     end
     return current
 end
+local function FirstInteract()
+    local character = LocalPlayer.Character
+    local camera = Workspace.CurrentCamera
+    
+    if not character or not camera then
+        return
+    end
 
+    local root = character:FindFirstChild("HumanoidRootPart")
+    if not root then
+        return
+    end
+    if not PROMPT_PATH or not PROMPT_PATH:IsA("ProximityPrompt") then
+        return
+    end
+    local originalCFrame = root.CFrame
+    root.CFrame = CFrame.new(-155.11795, 13.5628519, 1029.30005, 0.6862306, -5.54227739e-08, 0.727384031, 5.63844651e-08, 1, 2.30002701e-08, -0.727384031, 2.52296708e-08, 0.6862306)
+    task.wait(0.1)
+    local targetCameraCFrame = CFrame.new(root.Position) * CFrame.new(-155.11795, 13.5628519, 1029.30005, 0.6862306, -5.54227739e-08, 0.727384031, 5.63844651e-08, 1, 2.30002701e-08, -0.727384031, 2.52296708e-08, 0.6862306).Rotation
+    camera.CameraType = Enum.CameraType.Scriptable
+    local tween = TweenService:Create(camera, TWEEN_INFO, {CFrame = targetCameraCFrame})
+    tween:Play()
+    task.wait(TWEEN_TIME)
+    camera.CameraType = Enum.CameraType.Custom
+    local holdDuration = PROMPT_PATH.HoldDuration or 0.15
+    local vInputManager = game:GetService("VirtualInputManager")
+    vInputManager:SendKeyEvent(true, INTERACT_KEY_STRING, false, game)
+    task.wait(holdDuration + 0.1)
+    vInputManager:SendKeyEvent(false, INTERACT_KEY_STRING, false, game)
+    task.wait(0.1)
+    vInputManager:SendKeyEvent(true, INTERACT_KEY_STRING, false, game)
+    task.wait(holdDuration + 0.1)
+    vInputManager:SendKeyEvent(false, INTERACT_KEY_STRING, false, game)
+    task.wait(0.1)
+    root.CFrame = originalCFrame
+end
 Tabs.Event:AddToggle("autorestart", {
     Title = "Auto restart tomade torelli",
     Default = false,
@@ -361,20 +445,20 @@ Tabs.Event:AddToggle("autorestart", {
 
 coroutine.wrap(function()
     while true do
-        task.wait(1) 
+        task.wait(1)
         
         if GlobalEnv.autodrestart == true then
-            local CheckForRestart = SafeFindChild(
+            local visualFolder = SafeFindChild(
                 Workspace.ScriptedMap.Event,
                 "HitListVisualizer",
-                "Hitbox",
-                "GuiAttachment",
-                "Billboard",
-                "TextLabel"
+                "VisualFolder"
             )
-            
-            if not CheckForRestart then
+
+            if visualFolder and #visualFolder:GetChildren() == 0 then
+                local Event = ReplicatedStorage.Remotes.CardUpdateEvent
                 Event:FireServer("purchaseReplay")
+                task.wait(1)
+                FirstInteract()
             end
         end
     end
@@ -487,21 +571,32 @@ coroutine.wrap(function()
                             local platformUI = platform:FindFirstChild("PlatformEventUI")
                             if platformUI then
                                 local titleLabel = platformUI:FindFirstChild("Title")
+                                
                                 if titleLabel and titleLabel.Text ~= "" then
-                                    if CheckForToolAndSetFlag(titleLabel.Text) then
-                                        -- Teleport to specific platform position
-                                        if i == -1 then
-                                            game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-221.470734, 14.4373589, 963.78894, 0.0145302061, -3.20977449e-08, 0.99989444, 1.6955525e-08, 1, 3.18547393e-08, -0.99989444, 1.64908798e-08, 0.0145302061)
-                                        elseif i == -2 then
-                                            game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-222.26709, 14.437356, 973.853394, -0.0029228921, -4.35246292e-08, 0.999995708, 2.78393379e-08, 1, 4.36061853e-08, -0.999995708, 2.79666743e-08, -0.0029228921)
-                                        elseif i == -3 then
-                                            game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-221.931732, 14.437356, 983.577087, 0.0145260086, 9.83009851e-09, 0.9998945, -3.94364275e-09, 1, -9.77384396e-09, -0.9998945, -3.80125176e-09, 0.0145260086)
-                                        elseif i == -4 then
-                                            game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-221.90036, 14.437356, 993.992615, -0.36594069, 3.05171817e-08, 0.930638194, 3.58376937e-08, 1, -1.86997635e-08, -0.930638194, 2.65089213e-08, -0.36594069)
+                                    -- Check if quest is incomplete by checking Union00 color
+                                    local visualFolder = platform:FindFirstChild("VisualFolder")
+                                    if visualFolder then
+                                        local targetFolder = visualFolder:FindFirstChild(titleLabel.Text)
+                                        if targetFolder then
+                                            local union00 = targetFolder:FindFirstChild("Union00")
+                                            if union00 and union00.Color == Color3.fromRGB(0, 0, 0) then
+                                                if CheckForToolAndSetFlag(titleLabel.Text) then
+                                                    -- Teleport to specific platform position
+                                                    if i == -1 then
+                                                        game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-221.470734, 14.4373589, 963.78894, 0.0145302061, -3.20977449e-08, 0.99989444, 1.6955525e-08, 1, 3.18547393e-08, -0.99989444, 1.64908798e-08, 0.0145302061)
+                                                    elseif i == -2 then
+                                                        game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-222.26709, 14.437356, 973.853394, -0.0029228921, -4.35246292e-08, 0.999995708, 2.78393379e-08, 1, 4.36061853e-08, -0.999995708, 2.79666743e-08, -0.0029228921)
+                                                    elseif i == -3 then
+                                                        game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-221.931732, 14.437356, 983.577087, 0.0145260086, 9.83009851e-09, 0.9998945, -3.94364275e-09, 1, -9.77384396e-09, -0.9998945, -3.80125176e-09, 0.0145260086)
+                                                    elseif i == -4 then
+                                                        game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-221.90036, 14.437356, 993.992615, -0.36594069, 3.05171817e-08, 0.930638194, 3.58376937e-08, 1, -1.86997635e-08, -0.930638194, 2.65089213e-08, -0.36594069)
+                                                    end
+                                                    task.wait(0.2)
+                                                    EquipTool(titleLabel.Text)
+                                                    task.wait(0.5)
+                                                end
+                                            end
                                         end
-                                        task.wait(0.2)
-                                        EquipTool(titleLabel.Text)
-                                        task.wait(0.5)
                                     end
                                 end
                             end
@@ -525,42 +620,6 @@ Tabs.Event:AddToggle(	"autoclaim"	, {
 			GlobalEnv.autoclaim = Value
 		end
 })
-local function FirstInteract()
-    local character = LocalPlayer.Character
-    local camera = Workspace.CurrentCamera
-    
-    if not character or not camera then
-        return
-    end
-
-    local root = character:FindFirstChild("HumanoidRootPart")
-    if not root then
-        return
-    end
-    if not PROMPT_PATH or not PROMPT_PATH:IsA("ProximityPrompt") then
-        return
-    end
-    local originalCFrame = root.CFrame
-    root.CFrame = CFrame.new(-155.11795, 13.5628519, 1029.30005, 0.6862306, -5.54227739e-08, 0.727384031, 5.63844651e-08, 1, 2.30002701e-08, -0.727384031, 2.52296708e-08, 0.6862306)
-    task.wait(0.1)
-    local targetCameraCFrame = CFrame.new(root.Position) * CFrame.new(-155.11795, 13.5628519, 1029.30005, 0.6862306, -5.54227739e-08, 0.727384031, 5.63844651e-08, 1, 2.30002701e-08, -0.727384031, 2.52296708e-08, 0.6862306).Rotation
-    camera.CameraType = Enum.CameraType.Scriptable
-    local tween = TweenService:Create(camera, TWEEN_INFO, {CFrame = targetCameraCFrame})
-    tween:Play()
-    task.wait(TWEEN_TIME)
-    camera.CameraType = Enum.CameraType.Custom
-    local holdDuration = PROMPT_PATH.HoldDuration or 0.15
-    local vInputManager = game:GetService("VirtualInputManager")
-    vInputManager:SendKeyEvent(true, INTERACT_KEY_STRING, false, game)
-    task.wait(holdDuration + 0.1)
-    vInputManager:SendKeyEvent(false, INTERACT_KEY_STRING, false, game)
-    task.wait(0.1)
-    vInputManager:SendKeyEvent(true, INTERACT_KEY_STRING, false, game)
-    task.wait(holdDuration + 0.1)
-    vInputManager:SendKeyEvent(false, INTERACT_KEY_STRING, false, game)
-    task.wait(0.1)
-    root.CFrame = originalCFrame
-end
 
 coroutine.wrap(function()
     while true do
@@ -568,6 +627,8 @@ coroutine.wrap(function()
         if Workspace.ScriptedMap.Event.EventRewards.TalkPart.ProximityPrompt.ActionText == "Talk" and GlobalEnv.autoclaim == true then
             FirstInteract()
         break
+        elseif Workspace.ScriptedMap.Event.EventRewards.TalkPart.ProximityPrompt.ActionText == "Claim" then
+            break
         end
     end
 end)()
