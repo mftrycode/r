@@ -483,7 +483,7 @@ Tabs.Event:AddToggle("autorestart", {
 
 coroutine.wrap(function()
     while true do
-        task.wait(1)
+        task.wait(10)
         
         if GlobalEnv.autodrestart == true then
             local visualFolder = SafeFindChild(
@@ -611,13 +611,13 @@ coroutine.wrap(function()
                                 local titleLabel = platformUI:FindFirstChild("Title")
                                 
                                 if titleLabel and titleLabel.Text ~= "" then
-                                    -- Check if quest is incomplete by checking Union00 color
+                                    -- Check if quest is incomplete by checking RootPart color
                                     local visualFolder = platform:FindFirstChild("VisualFolder")
                                     if visualFolder then
                                         local targetFolder = visualFolder:FindFirstChild(titleLabel.Text)
                                         if targetFolder then
-                                            local union00 = targetFolder:FindFirstChild("Union00")
-                                            if union00 and union00.Color == Color3.fromRGB(0, 0, 0) then
+                                            local RootPart = targetFolder:FindFirstChild("RootPart") 
+                                            if RootPart and RootPart.Color == Color3.fromRGB(0, 0, 0) then
                                                 if CheckForToolAndSetFlag(titleLabel.Text) then
                                                     -- Teleport to specific platform position
                                                     if i == -1 then
