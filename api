@@ -1,0 +1,1208 @@
+local Mock = {}
+Mock.__version = "XenoAPI Mock 1.__version"
+Mock.__safe = true
+
+-- Internal storage with weak tables for memory efficiency
+local storage = {
+    clipboard = "",
+    fpscap = 60,
+    readfiles = {},
+    folders = {},
+    hidden_props = setmetatable({}, { __mode = "k" }),
+    rawmetatable_map = setmetatable({}, { __mode = "k" }),
+    readonly_map = setmetatable({}, { __mode = "k" }),
+    thread_identity = 2,
+}
+
+-- Logging system (can be disabled for production)
+local ENABLE_LOGGING = false
+local function safeLog(name, ...)
+    if not ENABLE_LOGGING then return end
+    local args = {...}
+    local argStr = #args > 0 and (" | Args: " .. table.concat(args, ", ")) or ""
+    pcall(function() 
+        print(("[XenoAPI Mock] %s%s"):format(name, argStr)) 
+    end)
+end
+
+-- Toggle logging on/off
+Mock.enableLogging = function(enabled)
+    ENABLE_LOGGING = not not enabled
+    return ENABLE_LOGGING
+end
+
+-- ============================================
+-- ENVIRONMENT
+-- ============================================
+
+Mock.getgenv = function()
+    safeLog("getgenv")
+    if getgenv then return getgenv() end
+    return _G
+end
+
+Mock.getrenv = function()
+    safeLog("getrenv")
+    if getrenv then return getrenv() end
+    local env = {}
+    for k, v in pairs(_G) do env[k] = v end
+    return env
+end
+
+-- ============================================
+-- CLIPBOARD
+-- ============================================
+
+Mock.setclipboard = function(data)
+    safeLog("setclipboard")
+    if data == nil then data = "" end
+    storage.clipboard = tostring(data)
+    return true
+end
+
+Mock.getclipboard = function()
+    safeLog("getclipboard")
+    return storage.clipboard
+end
+
+Mock.setrbxclipboard = Mock.setclipboard
+
+-- ============================================
+-- FPS CAP
+-- ============================================
+
+Mock.setfpscap = function(val)
+    safeLog("setfpscap", val)
+    local num = tonumber(val)
+    if not num or num < 1 then
+        warn("setfpscap: Invalid FPS value, using 60")
+        num = 60
+    end
+    storage.fpscap = num
+    return true
+end
+
+Mock.getfpscap = function()
+    safeLog("getfpscap")
+    return storage.fpscap
+end
+
+-- ============================================
+-- FILESYSTEM
+-- ============================================
+
+local function normalizePath(path)
+    if type(path) ~= "string" then
+        error("Path must be a string")
+    end
+    return path:gsub("\\", "/"):gsub("//+", "/")
+end
+
+local function getDirectory(path)
+    return path:match("^(.+)/[^/]+$") or ""
+end
+
+Mock.writefile = function(path, content)
+    safeLog("writefile", path)
+    path = normalizePath(path)
+    
+    if writefile then
+        local ok = pcall(function() writefile(path, content) end)
+        if ok then return true end
+    end
+    
+    -- Auto-create parent folder
+    local dir = getDirectory(path)
+    if dir ~= "" then
+        storage.folders[dir] = true
+    end
+    
+    storage.readfiles[path] = tostring(content)
+    return true
+end
+
+Mock.readfile = function(path)
+    safeLog("readfile", path)
+    path = normalizePath(path)
+    
+    if readfile then
+        local ok, res = pcall(function() return readfile(path) end)
+        if ok then return res end
+    end
+    
+    local content = storage.readfiles[path]
+    if content == nil then
+        error("File not found: " .. path)
+    end
+    return content
+end
+
+Mock.isfile = function(path)
+    safeLog("isfile", path)
+    path = normalizePath(path)
+    
+    if isfile then
+        local ok, res = pcall(function() return isfile(path) end)
+        if ok then return res end
+    end
+    
+    return storage.readfiles[path] ~= nil
+end
+
+Mock.makefolder = function(path)
+    safeLog("makefolder", path)
+    path = normalizePath(path)
+    
+    if makefolder then
+        local ok = pcall(function() makefolder(path) end)
+        if ok then return true end
+    end
+    
+    storage.folders[path] = true
+    return true
+end
+
+Mock.isfolder = function(path)
+    safeLog("isfolder", path)
+    path = normalizePath(path)
+    
+    if isfolder then
+        local ok, res = pcall(function() return isfolder(path) end)
+        if ok then return res end
+    end
+    
+    return storage.folders[path] == true
+end
+
+Mock.listfiles = function(path)
+    safeLog("listfiles", path)
+    path = normalizePath(path)
+    
+    if listfiles then
+        local ok, res = pcall(function() return listfiles(path) end)
+        if ok then return res end
+    end
+    
+    local results = {}
+    local prefix = path == "" and "" or (path .. "/")
+    
+    for filepath, _ in pairs(storage.readfiles) do
+        if filepath:sub(1, #prefix) == prefix then
+            table.insert(results, filepath)
+        end
+    end
+    
+    return results
+end
+
+Mock.appendfile = function(path, content)
+    safeLog("appendfile", path)
+    path = normalizePath(path)
+    
+    if appendfile then
+        local ok = pcall(function() appendfile(path, content) end)
+        if ok then return true end
+    end
+    
+    storage.readfiles[path] = (storage.readfiles[path] or "") .. tostring(content)
+    return true
+end
+
+Mock.delfile = function(path)
+    safeLog("delfile", path)
+    path = normalizePath(path)
+    
+    if delfile then
+        local ok = pcall(function() delfile(path) end)
+        if ok then return true end
+    end
+    
+    storage.readfiles[path] = nil
+    return true
+end
+
+Mock.delfolder = function(path)
+    safeLog("delfolder", path)
+    path = normalizePath(path)
+    
+    if delfolder then
+        local ok = pcall(function() delfolder(path) end)
+        if ok then return true end
+    end
+    
+    storage.folders[path] = nil
+    
+    -- Delete all files in folder
+    local prefix = path .. "/"
+    for filepath, _ in pairs(storage.readfiles) do
+        if filepath:sub(1, #prefix) == prefix then
+            storage.readfiles[filepath] = nil
+        end
+    end
+    
+    return true
+end
+
+Mock.loadfile = function(path)
+    safeLog("loadfile", path)
+    path = normalizePath(path)
+    
+    if loadfile then
+        local ok, res = pcall(function() return loadfile(path) end)
+        if ok and res then return res end
+    end
+    
+    local content = storage.readfiles[path]
+    if not content then
+        return nil, "File not found: " .. path
+    end
+    
+    local chunk, err = loadstring(content, "@" .. path)
+    if not chunk then
+        return nil, "Syntax error: " .. tostring(err)
+    end
+    
+    return chunk
+end
+
+Mock.dofile = function(path)
+    safeLog("dofile", path)
+    local chunk, err = Mock.loadfile(path)
+    if not chunk then
+        error(err or "Failed to load file")
+    end
+    return chunk()
+end
+
+-- ============================================
+-- NETWORKING
+-- ============================================
+
+Mock.request = function(opts)
+    safeLog("request", opts and opts.Url)
+    
+    if type(opts) ~= "table" then
+        error("request expects a table")
+    end
+    
+    if type(opts.Url) ~= "string" then
+        error("request requires Url field")
+    end
+    
+    if request then
+        local ok, res = pcall(function() return request(opts) end)
+        if ok then return res end
+    end
+    
+    -- Return realistic mock response
+    return {
+        Success = true,
+        StatusCode = 200,
+        StatusMessage = "OK",
+        Body = '{"status":"mock","message":"Mock response from XenoAPI"}',
+        Headers = {
+            ["content-type"] = "application/json",
+            ["content-length"] = "54",
+        },
+    }
+end
+
+-- ============================================
+-- CRYPT
+-- ============================================
+
+Mock.crypt = {}
+
+Mock.crypt.base64encode = function(data)
+    safeLog("crypt.base64encode")
+    if type(data) ~= "string" then
+        data = tostring(data)
+    end
+    -- Simple mock encoding
+    return "base64_" .. data:gsub(".", function(c)
+        return string.format("%02x", string.byte(c))
+    end)
+end
+
+Mock.crypt.base64decode = function(data)
+    safeLog("crypt.base64decode")
+    if type(data) ~= "string" then
+        error("base64decode expects a string")
+    end
+    -- Mock decoding
+    local hex = data:match("^base64_(.+)$")
+    if hex then
+        return hex:gsub("..", function(h)
+            return string.char(tonumber(h, 16))
+        end)
+    end
+    return data
+end
+
+Mock.crypt.generatebytes = function(size)
+    safeLog("crypt.generatebytes", size)
+    size = tonumber(size) or 32
+    local bytes = {}
+    for i = 1, size do
+        bytes[i] = string.char(math.random(0, 255))
+    end
+    return table.concat(bytes)
+end
+
+Mock.crypt.generatekey = function()
+    safeLog("crypt.generatekey")
+    return Mock.crypt.generatebytes(32)
+end
+
+Mock.crypt.encrypt = function(data, key, iv, mode)
+    safeLog("crypt.encrypt")
+    return "encrypted_" .. tostring(data), "mock_iv_" .. tostring(key)
+end
+
+Mock.crypt.decrypt = function(data, key, iv, mode)
+    safeLog("crypt.decrypt")
+    local decrypted = tostring(data):match("^encrypted_(.+)$")
+    return decrypted or tostring(data)
+end
+
+Mock.crypt.hash = function(data, algorithm)
+    safeLog("crypt.hash", algorithm)
+    algorithm = algorithm or "sha256"
+    -- Simple mock hash
+    local hash = 0
+    for i = 1, #data do
+        hash = (hash * 31 + string.byte(data, i)) % 0xFFFFFFFF
+    end
+    return string.format("%s_%08x", algorithm, hash)
+end
+
+-- ============================================
+-- DEBUG
+-- ============================================
+
+Mock.debug = {}
+
+Mock.debug.getconstant = function(func, idx)
+    safeLog("debug.getconstant")
+    if type(func) ~= "function" then
+        error("getconstant expects a function")
+    end
+    return nil
+end
+
+Mock.debug.getconstants = function(func)
+    safeLog("debug.getconstants")
+    if type(func) ~= "function" then
+        error("getconstants expects a function")
+    end
+    return {}
+end
+
+Mock.debug.getinfo = function(func, options)
+    safeLog("debug.getinfo")
+    if type(func) ~= "function" and type(func) ~= "number" then
+        error("getinfo expects a function or stack level")
+    end
+    
+    return {
+        source = "@mock",
+        short_src = "mock",
+        func = type(func) == "function" and func or nil,
+        what = "Lua",
+        currentline = -1,
+        name = "mock_function",
+        nups = 0,
+        numparams = 0,
+        is_vararg = 0,
+        linedefined = 0,
+        lastlinedefined = 0,
+    }
+end
+
+Mock.debug.getproto = function(func, idx, activated)
+    safeLog("debug.getproto")
+    return function() end
+end
+
+Mock.debug.getprotos = function(func)
+    safeLog("debug.getprotos")
+    return {}
+end
+
+Mock.debug.getstack = function(level, index)
+    safeLog("debug.getstack")
+    level = tonumber(level) or 1
+    if index then
+        return nil
+    end
+    return {}
+end
+
+Mock.debug.getupvalue = function(func, idx)
+    safeLog("debug.getupvalue")
+    return nil
+end
+
+Mock.debug.getupvalues = function(func)
+    safeLog("debug.getupvalues")
+    return {}
+end
+
+Mock.debug.setconstant = function(func, idx, value)
+    safeLog("debug.setconstant")
+    return true
+end
+
+Mock.debug.setstack = function(level, idx, value)
+    safeLog("debug.setstack")
+    return true
+end
+
+Mock.debug.setupvalue = function(func, idx, value)
+    safeLog("debug.setupvalue")
+    return true
+end
+
+-- ============================================
+-- CLOSURES & FUNCTIONS
+-- ============================================
+
+Mock.checkcaller = function()
+    safeLog("checkcaller")
+    return false
+end
+
+Mock.clonefunction = function(func)
+    safeLog("clonefunction")
+    if type(func) ~= "function" then
+        error("clonefunction expects a function")
+    end
+    -- Return wrapped function
+    return function(...)
+        return func(...)
+    end
+end
+
+Mock.getcallingscript = function()
+    safeLog("getcallingscript")
+    return nil
+end
+
+Mock.getscriptclosure = function(script)
+    safeLog("getscriptclosure")
+    if typeof(script) ~= "Instance" or not script:IsA("LuaSourceContainer") then
+        error("getscriptclosure expects a Script or LocalScript")
+    end
+    return function() return {} end
+end
+
+Mock.getscriptbytecode = function(script)
+    safeLog("getscriptbytecode")
+    if typeof(script) ~= "Instance" or not script:IsA("LuaSourceContainer") then
+        error("getscriptbytecode expects a Script or LocalScript")
+    end
+    return "\27Lua\81\00\01\04\04\04\08\00" -- Mock bytecode header
+end
+
+Mock.getscripthash = function(script)
+    safeLog("getscripthash")
+    if typeof(script) ~= "Instance" then
+        return "mock_hash_" .. tostring(script)
+    end
+    return "hash_" .. script:GetFullName():gsub("%W", "_")
+end
+
+-- ============================================
+-- EXECUTOR
+-- ============================================
+
+Mock.identifyexecutor = function()
+    safeLog("identifyexecutor")
+    return "XenoAPI Mock", "2.0.0"
+end
+
+-- ============================================
+-- INSTANCES
+-- ============================================
+
+Mock.getconnections = function(signal)
+    safeLog("getconnections")
+    if typeof(signal) ~= "RBXScriptSignal" then
+        warn("getconnections expects an RBXScriptSignal")
+    end
+    return {}
+end
+
+Mock.getinstances = function()
+    safeLog("getinstances")
+    return {}
+end
+
+Mock.getnilinstances = function()
+    safeLog("getnilinstances")
+    return {}
+end
+
+Mock.gethui = function()
+    safeLog("gethui")
+    
+    if gethui then
+        local ok, res = pcall(gethui)
+        if ok then return res end
+    end
+    
+    -- Fallback to CoreGui
+    local ok, CoreGui = pcall(function()
+        return game:GetService("CoreGui")
+    end)
+    
+    return ok and CoreGui or nil
+end
+
+Mock.gethiddenproperty = function(instance, property)
+    safeLog("gethiddenproperty", property)
+    
+    if typeof(instance) ~= "Instance" then
+        error("gethiddenproperty expects an Instance")
+    end
+    
+    if type(property) ~= "string" then
+        error("Property name must be a string")
+    end
+    
+    -- Try to read normally first
+    local ok, value = pcall(function()
+        return instance[property]
+    end)
+    
+    if ok then return value end
+    
+    -- Check mock storage
+    local stored = storage.hidden_props[instance]
+    if stored then
+        return stored[property]
+    end
+    
+    return nil
+end
+
+Mock.sethiddenproperty = function(instance, property, value)
+    safeLog("sethiddenproperty", property)
+    
+    if typeof(instance) ~= "Instance" then
+        error("sethiddenproperty expects an Instance")
+    end
+    
+    if type(property) ~= "string" then
+        error("Property name must be a string")
+    end
+    
+    -- Try to set normally
+    local ok = pcall(function()
+        instance[property] = value
+    end)
+    
+    if ok then return true end
+    
+    -- Store in mock storage
+    if not storage.hidden_props[instance] then
+        storage.hidden_props[instance] = {}
+    end
+    storage.hidden_props[instance][property] = value
+    
+    return true
+end
+
+-- ============================================
+-- METATABLES
+-- ============================================
+
+Mock.getrawmetatable = function(obj)
+    safeLog("getrawmetatable")
+    
+    -- Check mock storage first
+    local stored = storage.rawmetatable_map[obj]
+    if stored then return stored end
+    
+    -- Try getmetatable
+    local mt = getmetatable(obj)
+    if mt then return mt end
+    
+    return {}
+end
+
+Mock.setrawmetatable = function(obj, metatable)
+    safeLog("setrawmetatable")
+    
+    if type(metatable) ~= "table" and metatable ~= nil then
+        error("Metatable must be a table or nil")
+    end
+    
+    -- Store in mock storage
+    storage.rawmetatable_map[obj] = metatable
+    
+    -- Try to set real metatable
+    pcall(setmetatable, obj, metatable)
+    
+    return obj
+end
+
+-- ============================================
+-- READONLY
+-- ============================================
+
+Mock.isreadonly = function(tbl)
+    safeLog("isreadonly")
+    
+    if type(tbl) ~= "table" then
+        return true -- Non-tables are considered readonly
+    end
+    
+    return storage.readonly_map[tbl] == true
+end
+
+Mock.setreadonly = function(tbl, readonly)
+    safeLog("setreadonly", readonly)
+    
+    if type(tbl) ~= "table" then
+        error("setreadonly expects a table")
+    end
+    
+    storage.readonly_map[tbl] = not not readonly
+    return true
+end
+
+-- ============================================
+-- HOOKING
+-- ============================================
+
+Mock.hookmetamethod = function(obj, metamethod, hook)
+    safeLog("hookmetamethod", metamethod)
+    
+    if type(hook) ~= "function" then
+        error("Hook must be a function")
+    end
+    
+    -- Return mock original function
+    return function(...)
+        return nil
+    end
+end
+
+Mock.hookfunction = function(target, hook)
+    safeLog("hookfunction")
+    
+    if type(target) ~= "function" then
+        error("Target must be a function")
+    end
+    
+    if type(hook) ~= "function" then
+        error("Hook must be a function")
+    end
+    
+    -- Return original (can't actually hook in mock)
+    return target
+end
+
+-- ============================================
+-- CLOSURE CHECKS
+-- ============================================
+
+Mock.isexecutorclosure = function(func)
+    safeLog("isexecutorclosure")
+    return false
+end
+
+Mock.iscclosure = function(func)
+    safeLog("iscclosure")
+    if type(func) ~= "function" then return false end
+    return debug.info(func, "s") == "[C]"
+end
+
+Mock.islclosure = function(func)
+    safeLog("islclosure")
+    if type(func) ~= "function" then return false end
+    return debug.info(func, "s") ~= "[C]"
+end
+
+Mock.newcclosure = function(func)
+    safeLog("newcclosure")
+    if type(func) ~= "function" then
+        error("newcclosure expects a function")
+    end
+    return func
+end
+
+-- ============================================
+-- GC & SCRIPTS
+-- ============================================
+
+Mock.getgc = function(include_tables)
+    safeLog("getgc")
+    return {}
+end
+
+Mock.getloadedmodules = function()
+    safeLog("getloadedmodules")
+    return {}
+end
+
+Mock.getrunningscripts = function()
+    safeLog("getrunningscripts")
+    return {}
+end
+
+Mock.getscripts = function()
+    safeLog("getscripts")
+    return {}
+end
+
+Mock.getsenv = function(script)
+    safeLog("getsenv")
+    if typeof(script) ~= "Instance" or not script:IsA("LuaSourceContainer") then
+        error("getsenv expects a Script or LocalScript")
+    end
+    return {}
+end
+
+Mock.getthreadidentity = function()
+    safeLog("getthreadidentity")
+    return storage.thread_identity
+end
+
+Mock.setthreadidentity = function(identity)
+    safeLog("setthreadidentity", identity)
+    identity = tonumber(identity) or 2
+    if identity < 0 or identity > 8 then
+        warn("Thread identity should be between 0 and 8")
+    end
+    storage.thread_identity = identity
+    return true
+end
+
+-- ============================================
+-- FIRE FUNCTIONS
+-- ============================================
+
+Mock.fireclickdetector = function(clickDetector, distance, mouseClick)
+    safeLog("fireclickdetector")
+    
+    if typeof(clickDetector) ~= "Instance" or not clickDetector:IsA("ClickDetector") then
+        error("fireclickdetector expects a ClickDetector")
+    end
+    
+    -- Can't actually fire in mock environment
+    return true
+end
+
+Mock.firetouchinterest = function(part, otherPart, toggle)
+    safeLog("firetouchinterest")
+    
+    if typeof(part) ~= "Instance" or not part:IsA("BasePart") then
+        error("firetouchinterest expects a BasePart as first argument")
+    end
+    
+    if typeof(otherPart) ~= "Instance" or not otherPart:IsA("BasePart") then
+        error("firetouchinterest expects a BasePart as second argument")
+    end
+    
+    return true
+end
+
+Mock.fireproximityprompt = function(prompt, amount, skip)
+    safeLog("fireproximityprompt")
+    
+    if typeof(prompt) ~= "Instance" or not prompt:IsA("ProximityPrompt") then
+        error("fireproximityprompt expects a ProximityPrompt")
+    end
+    
+    -- Simulate trigger
+    pcall(function()
+        if prompt.Enabled then
+            prompt:InputHoldBegin()
+            task.wait(prompt.HoldDuration or 0)
+            prompt:InputHoldEnd()
+        end
+    end)
+    
+    return true
+end
+
+-- ============================================
+-- DRAWING
+-- ============================================
+
+Mock.Drawing = {}
+Mock.Drawing.Fonts = {
+    UI = 0,
+    System = 1,
+    Plex = 2,
+    Monospace = 3,
+}
+
+Mock.Drawing.new = function(drawingType)
+    safeLog("Drawing.new", drawingType)
+    
+    local drawing = {
+        Type = drawingType,
+        Visible = true,
+        Color = Color3.new(1, 1, 1),
+        Transparency = 1,
+        Thickness = 1,
+        Remove = function(self)
+            self.Visible = false
+        end,
+        Destroy = function(self)
+            self.Visible = false
+        end,
+    }
+    
+    -- Type-specific properties
+    if drawingType == "Line" then
+        drawing.From = Vector2.new(0, 0)
+        drawing.To = Vector2.new(0, 0)
+    elseif drawingType == "Circle" then
+        drawing.Position = Vector2.new(0, 0)
+        drawing.Radius = 10
+        drawing.NumSides = 64
+        drawing.Filled = false
+    elseif drawingType == "Square" then
+        drawing.Position = Vector2.new(0, 0)
+        drawing.Size = Vector2.new(100, 100)
+        drawing.Filled = false
+    elseif drawingType == "Text" then
+        drawing.Text = ""
+        drawing.Position = Vector2.new(0, 0)
+        drawing.Size = 18
+        drawing.Center = false
+        drawing.Outline = false
+        drawing.OutlineColor = Color3.new(0, 0, 0)
+        drawing.Font = Mock.Drawing.Fonts.UI
+    elseif drawingType == "Quad" then
+        drawing.PointA = Vector2.new(0, 0)
+        drawing.PointB = Vector2.new(0, 0)
+        drawing.PointC = Vector2.new(0, 0)
+        drawing.PointD = Vector2.new(0, 0)
+        drawing.Filled = false
+    elseif drawingType == "Triangle" then
+        drawing.PointA = Vector2.new(0, 0)
+        drawing.PointB = Vector2.new(0, 0)
+        drawing.PointC = Vector2.new(0, 0)
+        drawing.Filled = false
+    elseif drawingType == "Image" then
+        drawing.Position = Vector2.new(0, 0)
+        drawing.Size = Vector2.new(100, 100)
+        drawing.Data = ""
+    end
+    
+    return setmetatable(drawing, {
+        __index = function(t, k)
+            return rawget(t, k)
+        end,
+        __newindex = function(t, k, v)
+            rawset(t, k, v)
+        end,
+    })
+end
+
+Mock.isrenderobj = function(obj)
+    safeLog("isrenderobj")
+    return type(obj) == "table" and obj.Type ~= nil
+end
+
+Mock.getrenderproperty = function(obj, prop)
+    safeLog("getrenderproperty", prop)
+    if type(obj) == "table" then
+        return obj[prop]
+    end
+    return nil
+end
+
+Mock.setrenderproperty = function(obj, prop, value)
+    safeLog("setrenderproperty", prop)
+    if type(obj) == "table" then
+        obj[prop] = value
+        return true
+    end
+    return false
+end
+
+Mock.cleardrawcache = function()
+    safeLog("cleardrawcache")
+    return true
+end
+
+-- ============================================
+-- WEBSOCKET
+-- ============================================
+
+Mock.WebSocket = {}
+Mock.WebSocket.connect = function(url)
+    safeLog("WebSocket.connect", url)
+    
+    if type(url) ~= "string" then
+        error("WebSocket.connect expects a URL string")
+    end
+    
+    local ws = {
+        Send = function(self, message)
+            safeLog("WebSocket.Send")
+            if self.OnMessage then
+                -- Echo back in mock
+                task.defer(function()
+                    if type(self.OnMessage) == "function" then
+                        self.OnMessage("Mock echo: " .. tostring(message))
+                    end
+                end)
+            end
+        end,
+        Close = function(self)
+            safeLog("WebSocket.Close")
+            if self.OnClose then
+                task.defer(function()
+                    if type(self.OnClose) == "function" then
+                        self.OnClose()
+                    end
+                end)
+            end
+        end,
+        OnMessage = nil,
+        OnClose = nil,
+    }
+    
+    return ws
+end
+
+-- ============================================
+-- MISC
+-- ============================================
+
+Mock.getcustomasset = function(path)
+    safeLog("getcustomasset", path)
+    
+    if type(path) ~= "string" then
+        error("getcustomasset expects a string path")
+    end
+    
+    -- Return mock rbxasset URL
+    return "rbxasset://mock/" .. path:gsub("[^%w%-_.]", "_")
+end
+
+Mock.queue_on_teleport = function(code)
+    safeLog("queue_on_teleport")
+    
+    if type(code) ~= "string" and type(code) ~= "function" then
+        error("queue_on_teleport expects a string or function")
+    end
+    
+    return true
+end
+
+Mock.queueonteleport = Mock.queue_on_teleport
+
+-- ============================================
+-- COMPRESSION
+-- ============================================
+
+Mock.lz4compress = function(data)
+    safeLog("lz4compress")
+    
+    if type(data) ~= "string" then
+        data = tostring(data)
+    end
+    
+    -- Mock compression (just add header)
+    return "LZ4\0" .. data
+end
+
+Mock.lz4decompress = function(data, size)
+    safeLog("lz4decompress")
+    
+    if type(data) ~= "string" then
+        error("lz4decompress expects a string")
+    end
+    
+    -- Mock decompression (remove header)
+    if data:sub(1, 4) == "LZ4\0" then
+        return data:sub(5)
+    end
+    
+    return data
+end
+
+-- ============================================
+-- INSTALL TO GLOBAL
+-- ============================================
+
+Mock.installToGlobal = function()
+    safeLog("installToGlobal - Starting")
+    
+    local env = Mock.getgenv()
+    local installed = {}
+    
+    local functionMap = {
+        -- Environment
+        getgenv = Mock.getgenv,
+        getrenv = Mock.getrenv,
+        
+        -- Clipboard
+        setclipboard = Mock.setclipboard,
+        getclipboard = Mock.getclipboard,
+        setrbxclipboard = Mock.setrbxclipboard,
+        
+        -- FPS
+        setfpscap = Mock.setfpscap,
+        getfpscap = Mock.getfpscap,
+        
+        -- Filesystem
+        writefile = Mock.writefile,
+        readfile = Mock.readfile,
+        isfile = Mock.isfile,
+        makefolder = Mock.makefolder,
+        isfolder = Mock.isfolder,
+        listfiles = Mock.listfiles,
+        appendfile = Mock.appendfile,
+        delfile = Mock.delfile,
+        delfolder = Mock.delfolder,
+        loadfile = Mock.loadfile,
+        dofile = Mock.dofile,
+        
+        -- Networking
+        request = Mock.request,
+        
+        -- Crypto
+        crypt = Mock.crypt,
+        
+        -- Debug
+        debug = Mock.debug,
+        
+        -- Closures
+        checkcaller = Mock.checkcaller,
+        clonefunction = Mock.clonefunction,
+        getcallingscript = Mock.getcallingscript,
+        getscriptclosure = Mock.getscriptclosure,
+        getscriptbytecode = Mock.getscriptbytecode,
+        getscripthash = Mock.getscripthash,
+        
+        -- Executor
+        identifyexecutor = Mock.identifyexecutor,
+        
+        -- Instances
+        getconnections = Mock.getconnections,
+        getinstances = Mock.getinstances,
+        getnilinstances = Mock.getnilinstances,
+        gethui = Mock.gethui,
+        gethiddenproperty = Mock.gethiddenproperty,
+        sethiddenproperty = Mock.sethiddenproperty,
+        
+        -- Metatables
+        getrawmetatable = Mock.getrawmetatable,
+        setrawmetatable = Mock.setrawmetatable,
+        
+        -- Readonly
+        isreadonly = Mock.isreadonly,
+        setreadonly = Mock.setreadonly,
+        
+        -- Hooking
+        hookmetamethod = Mock.hookmetamethod,
+        hookfunction = Mock.hookfunction,
+        
+        -- Closure checks
+        isexecutorclosure = Mock.isexecutorclosure,
+        iscclosure = Mock.iscclosure,
+        islclosure = Mock.islclosure,
+        newcclosure = Mock.newcclosure,
+        
+        -- GC & Scripts
+        getgc = Mock.getgc,
+        getloadedmodules = Mock.getloadedmodules,
+        getrunningscripts = Mock.getrunningscripts,
+        getscripts = Mock.getscripts,
+        getsenv = Mock.getsenv,
+        getthreadidentity = Mock.getthreadidentity,
+        setthreadidentity = Mock.setthreadidentity,
+        
+        -- Fire functions
+        fireclickdetector = Mock.fireclickdetector,
+        firetouchinterest = Mock.firetouchinterest,
+        fireproximityprompt = Mock.fireproximityprompt,
+        
+        -- Drawing
+        Drawing = Mock.Drawing,
+        isrenderobj = Mock.isrenderobj,
+        getrenderproperty = Mock.getrenderproperty,
+        setrenderproperty = Mock.setrenderproperty,
+        cleardrawcache = Mock.cleardrawcache,
+        
+        -- WebSocket
+        WebSocket = Mock.WebSocket,
+        
+        -- Misc
+        getcustomasset = Mock.getcustomasset,
+        queue_on_teleport = Mock.queue_on_teleport,
+        queueonteleport = Mock.queueonteleport,
+        
+        -- Compression
+        lz4compress = Mock.lz4compress,
+        lz4decompress = Mock.lz4decompress,
+    }
+    
+    for name, func in pairs(functionMap) do
+        if env[name] == nil then
+            env[name] = func
+            table.insert(installed, name)
+        end
+    end
+    
+    if ENABLE_LOGGING then
+        print(("[XenoAPI Mock] Installed %d functions: %s"):format(
+            #installed,
+            table.concat(installed, ", ")
+        ))
+    end
+    
+    return true
+end
+
+-- ============================================
+-- UTILITY FUNCTIONS
+-- ============================================
+
+Mock.getInstalledFunctions = function()
+    local functions = {}
+    local env = Mock.getgenv()
+    
+    local checkList = {
+        "getgenv", "getrenv", "setclipboard", "getclipboard",
+        "writefile", "readfile", "isfile", "makefolder",
+        "request", "crypt", "debug", "getrawmetatable",
+        "identifyexecutor", "Drawing", "WebSocket"
+    }
+    
+    for _, name in ipairs(checkList) do
+        if env[name] ~= nil then
+            table.insert(functions, name)
+        end
+    end
+    
+    return functions
+end
+
+Mock.isInstalled = function()
+    local env = Mock.getgenv()
+    return env.identifyexecutor == Mock.identifyexecutor
+end
+
+Mock.getVersion = function()
+    return Mock.__version
+end
+
+Mock.isSafe = function()
+    return Mock.__safe
+end
+
+-- ============================================
+-- RETURN MODULE
+-- ============================================
+
+return Mock
